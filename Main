@@ -1,0 +1,586 @@
+npm create vite@latest binance-investment-app -- --template react
+cd binance-investment-app
+npm install
+npm install firebase lucide-react
+npm install -D tailwindcss @tailwindcss/viteimport { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+};
+
+const app = initializeApp(firebaseConfig);
+
+export const auth = getAuth(app);
+export const db = getFirestore(app);import { useState } from "react";
+import {
+  createUserWithEmailAndPassword,
+  updateProfile,
+} from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+import {
+  Eye,
+  EyeOff,
+  Wallet,
+  TrendingUp,
+  Users,
+  LogOut,
+} from "lucide-react";
+import { auth, db } from "./firebase";
+import "./App.css";
+
+const countries = [
+  { name: "Kenya", code: "+254" },
+  { name: "Uganda", code: "+256" },
+  { name: "Tanzania", code: "+255" },
+  { name: "United States", code: "+1" },
+  { name: "United Kingdom", code: "+44" },
+  { name: "Nigeria", code: "+234" },
+  { name: "South Africa", code: "+27" },
+];
+
+export default function App() {
+  const [showPassword, setShowPassword] = useState(false);
+  const [registered, setRegistered] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    fullName: "",
+    countryCode: "+254",
+    phone: "",
+    email: "",
+    password: "",
+    referralCode: "",
+  });
+
+  const update = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
+
+  async function register(e) {
+    e.preventDefault();
+    setError("");
+
+    if (!form.fullName.trim() || !form.phone.trim() || !form.email.trim()) {
+      setError("Please complete all required fields.");
+      return;
+    }
+
+    if (form.password.length < 6) {
+      setError("Your password must contain at least 6 characters.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const credential = await createUserWithEmailAndPassword(
+        auth,
+        form.email.trim(),
+        form.password
+      );
+
+      await updateProfile(credential.user, {
+        displayName: form.fullName.trim(),
+      });
+
+      await setDoc(doc(db, "users", credential.user.uid), {
+        fullName: form.fullName.trim(),
+        phone: `${form.countryCode}${form.phone.trim()}`,
+        email: form.email.trim(),
+        referralCode: form.referralCode.trim() || null,
+        createdAt: new Date().toISOString(),
+        accountStatus: "active",
+      });
+
+      setRegistered(true);
+    } catch (err) {
+      setError(
+        err.code === "auth/email-already-in-use"
+          ? "This email is already registered."
+          : err.code === "auth/weak-password"
+          ? "Please choose a stronger password."
+          : "Registration failed. Check your details and try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (registered) {
+    return (
+      <main className="dashboard">
+        <header className="topbar">
+          <div className="brand">
+            <TrendingUp size={25} />
+            <span>Investment Portal</span>
+          </div>
+          <button
+            className="logout"
+            onClick={() => auth.signOut().then(() => setRegistered(false))}
+          >
+            <LogOut size={18} /> Sign out
+          </button>
+        </header>
+
+        <section className="welcome">
+          <p>WELCOME BACK</p>
+          <h1>{form.fullName}</h1>
+          <p>Your account dashboard</p>
+        </section>
+
+        <section className="balance-card">
+          <p>Demo investment balance</p>
+          <h2>$0.00</h2>
+          <span>Real deposits are not enabled.</span>
+        </section>
+
+        <section className="stats">
+          <article className="stat-card">
+            <Wallet />
+            <p>Minimum plan</p>
+            <h3>$294</h3>
+          </article>
+
+          <article className="stat-card">
+            <TrendingUp />
+            <p>Proposed daily return</p>
+            <h3>$3</h3>
+            <small>Illustrative only; not guaranteed.</small>
+          </article>
+
+          <article className="stat-card">
+            <Users />
+            <p>Referral code</p>
+            <h3>{form.referralCode || "Not provided"}</h3>
+          </article>
+        </section>
+
+        <section className="notice">
+          <h3>Investment information</h3>
+          <p>
+            This is a demonstration dashboard. No money has been deposited,
+            and no actual investment or earnings are recorded.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="page">
+      <section className="form-card">
+        <div className="logo">
+          <TrendingUp size={32} />
+        </div>
+
+        <h1>Create Account</h1>
+        <p className="subtitle">
+          Register to access your investment dashboard.
+        </p>
+
+        {error && <div className="error">{error}</div>}
+
+        <form onSubmit={register}>
+          <label>Full Names</label>
+          <input
+            name="fullName"
+            placeholder="Enter your full legal name"
+            value={form.fullName}
+            onChange={update}
+            autoComplete="name"
+            required
+          />
+
+          <label>Email Address</label>
+          <input
+            name="email"
+            type="email"
+            placeholder="Enter your email address"
+            value={form.email}
+            onChange={update}
+            autoComplete="email"
+            required
+          />
+
+          <label>Phone Number</label>
+          <div className="phone-row">
+            <select
+              name="countryCode"
+              value={form.countryCode}
+              onChange={update}
+              aria-label="Country calling code"
+            >
+              {countries.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name} ({country.code})
+                </option>
+              ))}
+            </select>
+
+            <input
+              name="phone"
+              type="tel"
+              placeholder="Phone number"
+              value={form.phone}
+              onChange={update}
+              autoComplete="tel-national"
+              required
+            />
+          </div>
+
+          <label>Password</label>
+          <div className="password-row">
+            <input
+              name="password"
+              type={showPassword ? "text" : "password"}
+              placeholder="Create a password"
+              value={form.password}
+              onChange={update}
+              autoComplete="new-password"
+              minLength={6}
+              required
+            />
+            <button
+              type="button"
+              className="eye-button"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
+          </div>
+
+          <label>Referral Code (Optional)</label>
+          <input
+            name="referralCode"
+            placeholder="Enter referral code"
+            value={form.referralCode}
+            onChange={update}
+          />
+
+          <button className="primary-button" disabled={loading}>
+            {loading ? "Creating account..." : "Create Account"}
+          </button>
+        </form>
+
+        <p className="footer-text">
+          Already registered? Sign in through your account authentication flow.
+        </p>
+
+        <p className="disclaimer">
+          Demonstration interface only. No real deposits or guaranteed returns.
+          This app is not affiliated with Binance.
+        </p>
+      </section>
+    </main>
+  );
+}@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0b0e11;
+  color: #f5f5f5;
+  font-family: "Inter", sans-serif;
+}
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 16px;
+}
+
+.form-card {
+  width: 100%;
+  max-width: 440px;
+  padding: 32px;
+  border: 1px solid #30363d;
+  border-radius: 20px;
+  background: #161a1e;
+}
+
+.logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 20px;
+  border-radius: 16px;
+  background: #f0b90b;
+  color: #0b0e11;
+}
+
+h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 27px;
+}
+
+.subtitle {
+  margin: 10px 0 26px;
+  color: #9ba3ad;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+label {
+  display: block;
+  margin: 18px 0 8px;
+  color: #e5e7eb;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+input,
+select {
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  padding: 0 12px;
+  border: 1px solid #343a40;
+  border-radius: 9px;
+  outline: none;
+  background: #0b0e11;
+  color: #f5f5f5;
+  font: inherit;
+  font-size: 13px;
+}
+
+input:focus,
+select:focus {
+  border-color: #f0b90b;
+}
+
+input::placeholder {
+  color: #707780;
+}
+
+.phone-row {
+  display: flex;
+  gap: 8px;
+}
+
+.phone-row select {
+  flex: 1.2;
+  font-size: 11px;
+}
+
+.phone-row input {
+  flex: 1;
+}
+
+.password-row {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.password-row input {
+  padding-right: 46px;
+}
+
+.eye-button {
+  position: absolute;
+  right: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: none;
+  background: transparent;
+  color: #aeb5bd;
+  cursor: pointer;
+}
+
+.primary-button {
+  width: 100%;
+  height: 48px;
+  margin-top: 25px;
+  border: none;
+  border-radius: 9px;
+  background: #f0b90b;
+  color: #111;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary-button:hover {
+  background: #ffcc33;
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.error {
+  padding: 12px;
+  border: 1px solid #a33;
+  border-radius: 8px;
+  background: #321b1b;
+  color: #ffb4b4;
+  font-size: 13px;
+}
+
+.footer-text,
+.disclaimer {
+  margin-top: 22px;
+  color: #a3aab3;
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.disclaimer {
+  color: #777f88;
+  font-size: 11px;
+}
+
+.dashboard {
+  min-height: 100vh;
+  padding: 24px;
+  max-width: 1100px;
+  margin: auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #f0b90b;
+  font-weight: 800;
+}
+
+.logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #343a40;
+  border-radius: 8px;
+  background: #161a1e;
+  color: white;
+  cursor: pointer;
+}
+
+.welcome {
+  margin: 45px 0 25px;
+}
+
+.welcome p {
+  color: #9ba3ad;
+  font-size: 13px;
+}
+
+.welcome h1 {
+  text-align: left;
+}
+
+.balance-card {
+  padding: 28px;
+  border-radius: 16px;
+  background: linear-gradient(120deg, #342b0d, #191c1f);
+  border: 1px solid #69541b;
+}
+
+.balance-card p,
+.balance-card span {
+  color: #c6cbd1;
+  font-size: 13px;
+}
+
+.balance-card h2 {
+  margin: 15px 0;
+  font-size: 38px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.stat-card,
+.notice {
+  padding: 22px;
+  border: 1px solid #30363d;
+  border-radius: 14px;
+  background: #161a1e;
+  overflow-wrap: anywhere;
+}
+
+.stat-card svg {
+  color: #f0b90b;
+}
+
+.stat-card p,
+.stat-card small,
+.notice p {
+  color: #a3aab3;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.stat-card h3 {
+  font-size: 20px;
+}
+
+.notice {
+  margin-top: 22px;
+}
+
+.notice h3 {
+  margin-top: 0;
+}
+
+@media (max-width: 650px) {
+  .form-card {
+    padding: 24px 18px;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard {
+    padding: 18px;
+  }
+}@import "tailwindcss";
+
+html {
+  min-width: 320px;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+}import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+});npm install -D @vitejs/plugin-react
